@@ -1,3 +1,7 @@
+package CNN_JAVA;
+
+import CNN_JAVA.util.*;
+import sun.rmi.server.Activation;
 
 interface Layer {
     enum LayerType {
@@ -39,6 +43,18 @@ class Tensor {
             }
             System.out.println();
         }
+    }
+
+    public double[][] T(){
+        int x = this.tensor.length;
+        int y= this.tensor[0].length;
+        double[][] temp = new double[y][x];
+        for (int i = 0; i < x; i++) {
+            for (int j = 0; j < y; j++) {
+                temp[j][i] = this.tensor[i][j];
+            }
+        }
+        return temp;
     }
 }
 
@@ -109,7 +125,6 @@ class CONV implements Layer {
     }
 }
 
-
 class POOL implements Layer{
     enum POOL_TYPE{max,average}
     private POOL_TYPE type ;
@@ -123,15 +138,43 @@ class POOL implements Layer{
         this.type = type;
         this.PoolSize = poolSize;
     }
+
+    public void padding(){
+        int size = this.InputTensor.getTensor().length ;
+        // 如果输入tensor的shape不是偶数，则进行增加一行，一列的padding操作
+        if (size / 2 != 0){
+            Tensor temp_tensor = new Tensor(size+1,size+1);
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < size; j++) {
+                    temp_tensor.setTensorByPixel(i,j,this.InputTensor.getTensor()[i][j]);
+                }
+            }
+            // padding新加的一行和一列
+            for (int i = 0; i < size+1; i++) {
+                temp_tensor.setTensorByPixel(i,size,0);
+                temp_tensor.setTensorByPixel(size,i,0);
+            }
+            this.InputTensor = temp_tensor;
+        }
+    }
+
     @Override
     public void run_forward() {
+        // 在前向传播之前先进行padding
+//        padding();
         int inputsize = InputTensor.getTensor().length;
         int outputsize = inputsize / this.PoolSize ;
         OutputTensor = new Tensor(outputsize,outputsize) ;
         int x = 0;
         int y = 0;
-        for (int j = 0; j < inputsize; j+=this.PoolSize) {
-            for (int i = 0; i < inputsize; i+=this.PoolSize) {
+        for (int i = 0; i < inputsize; i+=this.PoolSize) {
+            // 如果这次循环结束时越界，则舍弃
+            if(i+this.PoolSize-1>=inputsize)
+                break;
+            for (int j = 0; j < inputsize; j+=this.PoolSize) {
+                // 如果这次循环结束时越界，则舍弃
+                if (j+this.PoolSize-1>=inputsize)
+                    break;
                 double temp = findMax(i,j);
                 OutputTensor.setTensorByPixel(x,y,temp);
                 // 一次输入到outputTensor中，以x为索引
@@ -148,6 +191,7 @@ class POOL implements Layer{
         System.out.println("****** After the Pooling layer");
         OutputTensor.printTensor();
     }
+
     public double findMax(int x, int y){
         double temp_max = 0 ;
         for (int i = x; i < x+this.PoolSize; i++) {
@@ -159,6 +203,7 @@ class POOL implements Layer{
         }
         return temp_max;
     }
+
     public Tensor getOutputTensor(){
         return this.OutputTensor;
     }
@@ -238,6 +283,8 @@ class DENSE implements Layer{
     }
 }
 
+
+
 public class cnn {
     public static void main(String[] args) {
         // set image
@@ -262,12 +309,13 @@ public class cnn {
 
         Tensor inputImage = new Tensor(image);
 
-        CONV conv1 = new CONV(inputImage, 1, 3);
+        CONV conv1 = new CONV(inputImage, 1, 2);
         conv1.setParameters(para,bias);
         conv1.run_forward();
         conv1.print_output();
+        Tensor conv1_out = util.Activation(conv1.getOutputTensor(),"tanh");
 
-        POOL pool1 = new POOL(conv1.getOutputTensor(), POOL.POOL_TYPE.max,2) ;
+        POOL pool1 = new POOL(conv1_out, POOL.POOL_TYPE.max,2) ;
         pool1.run_forward();
         pool1.print_output();
 
@@ -279,6 +327,16 @@ public class cnn {
         dense1.setDensePara(densepara,densebias);
         dense1.run_forward();
         dense1.print_output();
+
+        double[] result = util.softmax(dense1.getOutputTensor().T()[0]);
+        for (double res:result) {
+            System.out.println(res);
+        }
+
+
+        String packageName = cnn.class.getPackage().getName();
+        System.out.println(packageName);
+
     }
 }
 
