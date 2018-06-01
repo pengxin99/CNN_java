@@ -12,25 +12,26 @@ public class util {
     // activation
     static public Tensor Activation(Tensor input, String type){
         for (double[][] data : input.getTensor()) {
-            int size = input.getTensor().get(0).length;
+            int x_size = input.getTensor().get(0).length;
+            int y_size = input.getTensor().get(0)[0].length;
 //            double val_temp = 0.0;
             if ("sigmoid".equals(type)){
-                for (int i = 0; i < size; i++) {
-                    for (int j = 0; j < size; j++) {
+                for (int i = 0; i < x_size; i++) {
+                    for (int j = 0; j < y_size; j++) {
                         data[i][j] = sigmoid(data[i][j]);
 //                        input.setTensorByPixel(i,j,val_temp);
                     }
                 }
             }else if ("tanh".equals(type)){
-                for (int i = 0; i < size; i++) {
-                    for (int j = 0; j < size; j++) {
+                for (int i = 0; i < x_size; i++) {
+                    for (int j = 0; j < y_size; j++) {
                         data[i][j] = tanh(data[i][j]);
 //                        input.setTensorByPixel(i,j,val_temp);
                     }
                 }
             }else if ("relu".equals(type)){
-                for (int i = 0; i < size; i++) {
-                    for (int j = 0; j < size; j++) {
+                for (int i = 0; i < x_size; i++) {
+                    for (int j = 0; j < y_size; j++) {
                         data[i][j] = relu(data[i][j]);
 //                        input.setTensorByPixel(i,j,val_temp);
                     }
@@ -51,15 +52,38 @@ public class util {
         return Math.max(0.0,val);
     }
 
-    static public double[] softmax(double[] val){
+    static public double[] softmax(double[][] val){
         double sum = 0.0;
-        for (double v:val ) {
+        double[] data = val[0];
+        for (double v:data ) {
             sum += Math.exp(v);
         }
-        for (int i = 0; i < val.length; i++) {
-            val[i] = Math.exp(val[i]) / sum ;
+        for (int i = 0; i < data.length; i++) {
+            data[i] = Math.exp(data[i]) / sum ;
         }
-        return val;
+        return data;
+    }
+    static double[][] T(double[][] data){
+        int x = data.length;
+        int y = data[0].length;
+        /*
+        // 如果二维数组只有一列，则转置为一位数组
+        if (y == 1){
+            double[] new_data = new double[x];
+            for (int i = 0; i < x; i++) {
+                new_data[i] = data[i][0];
+
+            }
+        }else {
+        */
+            double[][] new_data = new double[y][x] ;
+            for (int i = 0; i < y; i++) {
+                for (int j = 0; j < x; j++) {
+                    new_data[i][j] = data[j][i];
+                }
+            }
+            return new_data;
+
     }
 
     static public ArrayList<String> ReadTxt(String filepath){

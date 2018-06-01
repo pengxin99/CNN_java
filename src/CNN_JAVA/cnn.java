@@ -29,7 +29,8 @@ class Tensor {
     private ArrayList<double[][]> tensorList = new ArrayList<>();
     private double[][] tensor;
 
-    Tensor(){}
+    Tensor() {
+    }
 
     Tensor(double[][] data) {
         this.tensorList.add(data);
@@ -71,7 +72,10 @@ class Tensor {
 }
 
 class CONV implements Layer {
+    enum CONV_TYPE {same, vaild, full}
+
     private LayerType Conv;
+    private String TYPE;
     private int FilterNum;                  // 卷积层中有几个卷积核
     private int FilterSize;
     private ArrayList<double[][][]> FilterPara;
@@ -79,10 +83,11 @@ class CONV implements Layer {
     private Tensor inputTensor;
     private Tensor outputTensor = new Tensor();
 
-    public CONV(Tensor inputTensor, int filternum, int filtersize) {
+    public CONV(Tensor inputTensor, int filternum, int filtersize, String type) {
         this.inputTensor = inputTensor;
         this.FilterNum = filternum;
         this.FilterSize = filtersize;
+        this.TYPE = type;
     }
 
     public void setParameters(ArrayList<double[][][]> para, ArrayList<double[]> bias) {
@@ -107,13 +112,40 @@ class CONV implements Layer {
         return this.outputTensor;
     }
 
+    // 更具 type 类型相应改变输入数据类型
+    public void SAME() {
+        ArrayList<double[][]> input_same = new ArrayList<>();
+        int InputSize = this.inputTensor.getTensor().get(0).length;
+        int AddSize = this.FilterSize - 1;
+        for (double[][] InitInput : this.inputTensor.getTensor()) {
+
+            double[][] newInput = new double[InputSize + AddSize][InputSize + AddSize];
+            for (int i = 0; i < newInput.length; i++) {
+                for (int j = 0; j < newInput[0].length; j++) {
+                    // 如果是不需要扩展的部分，直接将原始数组拿来即可
+                    if (i >= AddSize / 2 && j >= AddSize / 2 && i < InputSize + AddSize / 2 && j < InputSize + AddSize / 2) {
+                        newInput[i][j] = InitInput[i - AddSize / 2][j - AddSize / 2];
+                    } else {
+                        // 因为same需要扩展的部分，补0
+                        newInput[i][j] = 0;
+                    }
+                }
+            }
+            input_same.add(newInput);
+        }
+        this.inputTensor.setTensor(input_same);
+    }
+
     @Override
     public void run_forward() {
+        if (this.TYPE.equals("same")) {
+            SAME();
+        }
         int TensorNum = this.inputTensor.getTensor().size();
         int FilterNum = this.FilterPara.size();
 
-        double [][][] tensor = new double[TensorNum][][] ;
-        double [][][][] filter = new double[FilterNum][this.FilterPara.get(0)[0][0].length][this.FilterSize][this.FilterSize] ;
+        double[][][] tensor = new double[TensorNum][][];
+        double[][][][] filter = new double[FilterNum][this.FilterPara.get(0)[0][0].length][this.FilterSize][this.FilterSize];
         // 将数据和卷积核从 ArrayList 中提取出来，放入数组
         for (int i = 0; i < TensorNum; i++) {
             tensor[i] = this.inputTensor.getTensor().get(i);
@@ -123,25 +155,36 @@ class CONV implements Layer {
                 for (int k = 0; k < this.FilterSize; k++) {
                     for (int l = 0; l < this.FilterPara.get(0)[0][0].length; l++) {
                         // 将 5*5*1改为1*5*5
-                        filter[i][l][j][k] = this.FilterPara.get(i)[j][k][l] ;
+                        filter[i][l][j][k] = this.FilterPara.get(i)[j][k][l];
                     }
                 }
             }
         }
         // 每个卷积核对输入图像进行卷积操作，得到 filternum * tensorlistnum 个结果
-        int index = 0;
-        double[][][] temp = new double[FilterNum * TensorNum][][];
+
+        double[][][] OutPutList = new double[FilterNum][][];
         for (int i = 0; i < FilterNum; i++) {
+            double[][][] temp = new double[FilterNum * TensorNum][][];
+            int index = 0;
             for (int j = 0; j < TensorNum; j++) {
 //                this.outputTensor.getTensor().add(convRes(tensor[j],filter[i][j], this.Bias.get(i)[0]));
-                temp[index] = convRes(tensor[j],filter[i][j], this.Bias.get(i)[0]);
-                index ++ ;
+                temp[index] = convRes(tensor[j], filter[i][j], this.Bias.get(i)[0]);
+                index++;
             }
+            double[][] data = new double[temp[0].length][temp[0].length];
+            for (int j = 0; j < data.length; j++) {
+                for (int k = 0; k < data.length; k++) {
+                    for (int l = 0; l < index; l++) {
+                        data[j][k] += temp[l][j][k];
+                    }
+                }
+            }
+            OutPutList[i] = data;
         }
-        for (int i = 0; i < FilterNum; i++) {
-            for (int j = 0; j < TensorNum; j++) {
-//           卷积结果之间的相加。。。。。。。。。
-            }
+        // 将所有卷积输出结果add到outputTensor，数量应该是卷积核的个数
+        for (double[][] data :
+                OutPutList) {
+            outputTensor.getTensor().add(data);
         }
 
     }
@@ -179,7 +222,6 @@ class CONV implements Layer {
     }
 }
 
-
 class POOL implements Layer {
     enum POOL_TYPE {max, average}
 
@@ -209,13 +251,13 @@ class POOL implements Layer {
 
                 for (int j = 0; j < size; j++) {
                     for (int k = 0; k < size; k++) {
-                        temp_tensor.setTensorByPixel(i,j,k,this.InputTensor.getTensor().get(i)[j][k]);
+                        temp_tensor.setTensorByPixel(i, j, k, this.InputTensor.getTensor().get(i)[j][k]);
                     }
                 }
                 // padding新加的一行和一列
                 for (int l = 0; l < size + 1; l++) {
-                    temp_tensor.setTensorByPixel(i,l, size, 0);
-                    temp_tensor.setTensorByPixel(i,size, l, 0);
+                    temp_tensor.setTensorByPixel(i, l, size, 0);
+                    temp_tensor.setTensorByPixel(i, size, l, 0);
                 }
                 this.InputTensor = temp_tensor;
             }
@@ -232,7 +274,7 @@ class POOL implements Layer {
 
         for (double[][] data :
                 this.InputTensor.getTensor()) {
-            double[][] output_temp = new double[outputsize][outputsize] ;
+            double[][] output_temp = new double[outputsize][outputsize];
             int x = 0;
             int y = 0;
             for (int i = 0; i < inputsize; i += this.PoolSize) {
@@ -243,8 +285,8 @@ class POOL implements Layer {
                     // 如果这次循环结束时越界，则舍弃
                     if (j + this.PoolSize - 1 >= inputsize)
                         break;
-                    double temp = findMax(data, i, j);
-                    output_temp[x][y] = temp;
+                    double max = findMax(data, i, j);
+                    output_temp[x][y] = max;
                     // 一次输入到outputTensor中，以x为索引
                     x++;
                 }
@@ -263,8 +305,8 @@ class POOL implements Layer {
         OutputTensor.printTensor();
     }
 
-    public double findMax(double[][] data,int x, int y) {
-        double temp_max = 0;
+    public double findMax(double[][] data, int x, int y) {
+        double temp_max = -Double.MAX_VALUE;
         for (int i = x; i < x + this.PoolSize; i++) {
             for (int j = y; j < y + this.PoolSize; j++) {
                 if (data[i][j] > temp_max) {
@@ -279,12 +321,14 @@ class POOL implements Layer {
         return this.OutputTensor;
     }
 }
-/*
+
 class FLATTEN implements Layer {
     private Tensor InputTensor;
     private Tensor OutputTensor;
+    private int InputNum;
     private int InputSize;
     private int OutputSize;
+    private int index = 0;
 
     public FLATTEN() {
     }
@@ -299,21 +343,25 @@ class FLATTEN implements Layer {
 
     @Override
     public void run_forward() {
-        this.InputSize = InputTensor.getTensor().length;
-        this.OutputSize = this.InputSize * this.InputSize;
+        this.InputNum = InputTensor.getTensor().size();
+        this.InputSize = InputTensor.getTensor().get(0).length;
+        this.OutputSize = this.InputNum * this.InputSize * this.InputSize;
         OutputTensor = new Tensor(this.OutputSize, 1);
-        int index = 0;
-        for (int i = 0; i < this.InputSize; i++) {
-            for (int j = 0; j < this.InputSize; j++) {
-                OutputTensor.setTensorByPixel(index, 0, InputTensor.getTensor()[i][j]);
-                index++;
+
+        for (double[][] data :
+                this.InputTensor.getTensor()) {
+            for (int i = 0; i < this.InputSize; i++) {
+                for (int j = 0; j < this.InputSize; j++) {
+                    OutputTensor.setTensorByPixel(0, index, 0, data[i][j]);
+                    index++;
+                }
             }
         }
     }
 
     @Override
     public void print_output() {
-        System.out.println("****** After the Flatten layer");
+        System.out.println("***************** After the Flatten layer *** the length of the output is: " + index);
         OutputTensor.printTensor();
     }
 }
@@ -343,22 +391,27 @@ class DENSE implements Layer {
 
     @Override
     public void run_forward() {
-        for (int i = 0; i < this.OutputTensor.getTensor().length; i++) {
+        ArrayList<double[][]> OutputList = new ArrayList<>();
+        double[][] InputData = this.InputTensor.getTensor().get(0);
+        double[][] OutputData = this.OutputTensor.getTensor().get(0);
+        for (int i = 0; i < OutputData.length; i++) {
             double temp = 0.0;
-            for (int j = 0; j < this.InputTensor.getTensor().length; j++) {
-                temp += this.DensePara[i][j] * this.InputTensor.getTensor()[j][0];
+            for (int j = 0; j < InputData.length; j++) {
+                temp += InputData[j][0] * this.DensePara[j][i];
             }
-            this.OutputTensor.setTensorByPixel(i, 0, temp + this.DenseBias[i]);
+            OutputData[i][0] = temp + this.DenseBias[i];
         }
+        OutputList.add(OutputData);
+        this.OutputTensor.setTensor(OutputList);
     }
 
     @Override
     public void print_output() {
-        System.out.println("****** After the Dense layer");
+        System.out.println("****** After the Dense layer, the output size is :" + OutputTensor.getTensor().get(0).length);
         this.OutputTensor.printTensor();
     }
 }
-*/
+
 
 public class cnn {
     public static void main(String[] args) {
@@ -443,10 +496,12 @@ public class cnn {
         ReadPara_conv_1(conv_file, conv2d_1_1, conv2d_1_2);
         ReadPara_conv_1_bias(conv_bias_file, conv2d_1_1_bias, conv2d_1_2_bias);
 
-        ArrayList<double [][][]> conv1_para = new ArrayList<>();
-        ArrayList<double []> conv1_bias = new ArrayList<>();
-        conv1_para.add(conv2d_1_1); conv1_para.add(conv2d_1_2);
-        conv1_bias.add(conv2d_1_1_bias); conv1_bias.add(conv2d_1_2_bias);
+        ArrayList<double[][][]> conv1_para = new ArrayList<>();
+        ArrayList<double[]> conv1_bias = new ArrayList<>();
+        conv1_para.add(conv2d_1_1);
+        conv1_para.add(conv2d_1_2);
+        conv1_bias.add(conv2d_1_1_bias);
+        conv1_bias.add(conv2d_1_2_bias);
         //**************** 读取第一层卷积参数结束 *************
 
 
@@ -461,10 +516,12 @@ public class cnn {
         ReadPara_conv_2(conv_file, conv2d_2_1, conv2d_2_2);
         ReadPara_conv_1_bias(conv_bias_file, conv2d_2_1_bias, conv2d_2_2_bias);
 
-        ArrayList<double [][][]> conv2_para = new ArrayList<>();
-        ArrayList<double []> conv2_bias = new ArrayList<>();
-        conv2_para.add(conv2d_2_1); conv2_para.add(conv2d_2_2);
-        conv2_bias.add(conv2d_2_1_bias); conv2_bias.add(conv2d_2_2_bias);
+        ArrayList<double[][][]> conv2_para = new ArrayList<>();
+        ArrayList<double[]> conv2_bias = new ArrayList<>();
+        conv2_para.add(conv2d_2_1);
+        conv2_para.add(conv2d_2_2);
+        conv2_bias.add(conv2d_2_1_bias);
+        conv2_bias.add(conv2d_2_2_bias);
         //**************** 读取第二层卷积参数结束 *************
 
         //**************** 读取 dense_1 参数开始 *************
@@ -472,10 +529,10 @@ public class cnn {
         String dense_bias_file = "E:\\Java project\\CNN\\src\\dense_1_bias.txt";
 
         double[][] dense_1 = new double[968][128];
-        double[] dense_bias = new double[128];
+        double[] dense_1_bias = new double[128];
 
         ReadPara_dense(dense_file, dense_1);
-        ReadPara_dense_bias(dense_bias_file, dense_bias);
+        ReadPara_dense_bias(dense_bias_file, dense_1_bias);
         //**************** 读取 dense_1 参数结束 *************
 
         //**************** 读取 dense_2 参数开始 *************
@@ -490,40 +547,45 @@ public class cnn {
         //**************** 读取 dense_2 参数结束 *************
 
 
-
         Tensor inputImage = new Tensor(imageData);
 
-        CONV conv1 = new CONV(inputImage, 2, 5);
+        CONV conv1 = new CONV(inputImage, 2, 5, "same");
         conv1.setParameters(conv1_para, conv1_bias);
         conv1.run_forward();
         conv1.print_output();
         Tensor conv1_out = util.Activation(conv1.getOutputTensor(), "tanh");
 
-        CONV conv2 = new CONV(conv1_out, 2, 21);
-        conv2.setParameters(conv2_para,conv2_bias);
+        CONV conv2 = new CONV(conv1_out, 2, 21, "full");
+        conv2.setParameters(conv2_para, conv2_bias);
         conv2.run_forward();
         conv2.print_output();
         Tensor conv2_out = util.Activation(conv2.getOutputTensor(), "tanh");
 
 
-        POOL pool1 = new POOL(conv1_out, POOL.POOL_TYPE.max, 2);
+        POOL pool1 = new POOL(conv2_out, POOL.POOL_TYPE.max, 2);
         pool1.run_forward();
         pool1.print_output();
-/*
+
         FLATTEN flatten1 = new FLATTEN(pool1.getOutputTensor());
         flatten1.run_forward();
         flatten1.print_output();
-/*
-        DENSE dense1 = new DENSE(flatten1.getOutputTensor(), 2);
-        dense1.setDensePara(densepara, densebias);
+
+        DENSE dense1 = new DENSE(flatten1.getOutputTensor(), 128);
+        dense1.setDensePara(dense_1, dense_1_bias);
         dense1.run_forward();
         dense1.print_output();
+        Tensor dense1_out = util.Activation(dense1.getOutputTensor(), "tanh");
 
-        double[] result = util.softmax(dense1.getOutputTensor().T()[0]);
+        DENSE dense2 = new DENSE(dense1.getOutputTensor(), 4);
+        dense2.setDensePara(dense_2, dense_2_bias);
+        dense2.run_forward();
+        dense2.print_output();
+
+        double[] result = util.softmax(util.T(dense2.getOutputTensor().getTensor().get(0)));
         for (double res : result) {
             System.out.println(res);
         }
-*/
+
         String imagepath = "E:\\Java project\\CNN\\src\\left.jpg";
         String outimage = "E:\\Java project\\CNN\\src\\out.jpg";
 //        ReadPic("E:\\Java project\\CNN\\src\\left.jpg");
@@ -794,7 +856,6 @@ public class cnn {
 
 
     }
-
 
     public static byte[] getMatrixGray(String imagepath) {
 
